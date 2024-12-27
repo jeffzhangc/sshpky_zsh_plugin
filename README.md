@@ -47,5 +47,4 @@ pip install pexpect
 
 ## reference
 
-[python sshpass](https://github.com/bdelliott/sshpass)
-[sshpass-keyring](https://github.com/zhl2013/sshpass)
+- [python sshpass](https://github.com/bdelliott/sshpass)
