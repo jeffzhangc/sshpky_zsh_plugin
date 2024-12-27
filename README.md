@@ -32,6 +32,8 @@ plugins=(sshpky)
 
 ssh remote host，use keyring to save password and auto input password from keychain;
 
+use sshpky replace ssh to connect remote sshd server
+
 如果 keychain 中没有找到密码，会提示输入，密码，登陆成功后，保存到 keychain
 
 第二次登陆时，会从 keychain 中找密码
