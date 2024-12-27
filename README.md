@@ -38,11 +38,31 @@ use sshpky replace ssh to connect remote sshd server
 
 第二次登陆时，会从 keychain 中找密码
 
-python3
+### 1. 记录使用密码登录
 
 ```
-pip install keyring
-pip install pexpect
+(base) ➜  ~ sshpky xx.3_75
+Connecting cmd /usr/bin/ssh xx.3_75
+Sending password
+[ssh @xx.3_75 -p22 ]: successful login
+ Fri Dec 27 11:20:41 2024 from 10.1.106.96
+
+[xxx@xx-1.1.1.75 ~]
+$
+```
+
+### 2. jumpserver 使用 google MFA
+
+输入秘钥，会生成 6 位 code，如果登陆成功，记录到秘钥到 keychain
+
+```
+(base) ➜  ~ sshpky xxx-jumpserver
+Connecting cmd /usr/bin/ssh xxx-jumpserver
+google code : PCZEC3XDHKK0000 : 630000
+[ssh @xxx-jumpserver -p22 ]: successful login
+Opt>
+  ID    | 主机名                                         | IP                    | 平台            | 组织            | 备注
+--------+------------------------------------------------+-----------------------+-----------------+-----------------+--------------------------------
 ```
 
 ![image-20241226182312785](README.assets/image-20241226182312785.png)
