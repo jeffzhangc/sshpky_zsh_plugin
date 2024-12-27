@@ -1,4 +1,4 @@
-__MYSSHP_PY_DIR="${ZSH}/plugins/sshpky"
+__MYSSHP_PY_DIR="${ZSH_CUSTOM}/plugins/sshpky"
 
 local cmd="$__MYSSHP_PY_DIR/sshpky.py"
 
@@ -27,7 +27,8 @@ function __complete_ssh_host() {
 
 # 替代别名的函数
 function sshpky() {
-    python3 $cmd "$@"
+    python3 $__MYSSHP_PY_DIR/sshpky.py "$@"
+    # python3 $cmd "$@"
 }
 
 # alias sshpky='python3 ${cmd}'

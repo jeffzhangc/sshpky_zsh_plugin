@@ -82,7 +82,7 @@ def ssh(username, host, keychainservice="ssh_py_default", port=22):
     while True:
         i = child.expect(['Are you sure you want to continue connecting (yes/no)?', 'assword:','Connection refused','Verification code:','\$','>:','Last login:','Disconnected from','Please Enter MFA Code'])
 
-        print(i)
+        # print(i)
         if i == 0:
             # accept the host
             print ("New server, accept the host...")
