@@ -49,6 +49,13 @@ def setpassword(service, username, password):
         keyring.set_password(service, username, password)
 
 
+def mask_code(code):
+    """Mask the middle part of the code with asterisks"""
+    if len(code) <= 4:
+        return code
+    return code[:2] + '*' * (len(code) - 4) + code[-2:]
+
+
 def ssh(username, host, keychainservice="ssh_py_default", port=22):
     """Automate sending password when the server has public key auth disabled"""
 
@@ -114,7 +121,8 @@ def ssh(username, host, keychainservice="ssh_py_default", port=22):
             )
             # print("google code :", verificationCode, "---\n")
             code = str(google_authenticator_token(verificationCode))
-            print("google code :", verificationCode, ":", code)
+            masked_verificationCode = mask_code(verificationCode)
+            print("google code :", masked_verificationCode, ":", code)
             # print(f"Sending google222 auth code,{code},{len(code)}")
             child.sendline(code)
             # child.sendline("\n")
