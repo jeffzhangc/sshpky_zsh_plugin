@@ -78,17 +78,17 @@ def ssh(username, host, keychainservice="ssh_py_default", port=22):
     while True:
         i = child.expect(
             [
-                "Are you sure you want to continue connecting (yes/no)?",
-                "assword:",
-                "Connection refused",
-                "Verification code:",
-                "\$",
-                ">:",
-                "Last login:",
-                "Disconnected from",
-                "\[OTP Code\]:",
-                "Opt",
-                "Host]",
+                r"Are you sure you want to continue connecting (yes/no)?",
+                r"assword:",
+                r"Connection refused",
+                r"Verification code:",
+                r"\$",
+                r">:",
+                r"Last login:",
+                r"Disconnected from",
+                r"\[OTP Code\]:",
+                r"Opt",
+                r"Host]",
             ],
             timeout=30,
         )
