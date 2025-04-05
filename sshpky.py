@@ -65,7 +65,7 @@ def ssh(username, host, keychainservice="ssh_py_default", port=22):
         cmd = "/usr/bin/ssh %s@%s" % (username, host)
 
     if port != 22:
-        cmd = cmd + f" -p${port}"
+        cmd = cmd + f" -p{port}"
 
     print("Connecting cmd %s" % (cmd))
     child = pexpect.spawn(cmd)
@@ -175,4 +175,6 @@ if __name__ == "__main__":
         username = ""
         host = host_str
 
+    
+    # print(opts.port)
     ssh(username, host, port=int(opts.port), keychainservice=opts.keychainservice)
