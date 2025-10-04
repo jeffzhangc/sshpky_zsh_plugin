@@ -1,6 +1,7 @@
 package sshrunner
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -103,7 +104,6 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 			}
 			// 检查是否包含回车符或行结束
 			data += string(buf[:n])
-
 			for _, line := range strings.Split(data, "\n") {
 				line = strings.Trim(line, " ")
 				line = strings.Trim(line, "\t")
@@ -211,6 +211,26 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 
 					continue
 				}
+
+				if strings.Contains(line, "Host key verification failed") {
+					// ssh key error
+					os.Stdout.WriteString(data)
+					os.Stdout.WriteString("auto remove known_hosts? y/n default:y")
+					reader := bufio.NewReader(os.Stdin)
+					// fmt.Println("请输入内容：")
+					confirmStr, _ := reader.ReadBytes('\n') // 直接读取到换行符
+					fmt.Println("write str:", string(confirmStr))
+					if confirmStr != nil && string(confirmStr) == "N" {
+						errChan <- fmt.Errorf("do not modify knonw_hosts password: %v", err)
+						return
+					} else {
+						// os.Stdout.WriteString("auto modified knonw_hosts,retry to sshpky")
+						modifyFixKnowHost(data)
+						errChan <- fmt.Errorf("modified knonw_hosts,retry ssh: %v", host)
+					}
+					data = ""
+					return
+				}
 			}
 		}
 	}()
@@ -237,7 +257,6 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 		return "", fmt.Errorf("timed out waiting for prompt")
 	}
 }
-
 func savePwd(username, host, otpSecret, inputPassword string) {
 	if inputPassword != "" {
 		km.SavePassword(username, host, inputPassword)
@@ -246,4 +265,152 @@ func savePwd(username, host, otpSecret, inputPassword string) {
 	if otpSecret != "" {
 		km.SaveMFASecret(username, host, otpSecret)
 	}
+}
+
+func modifyFixKnowHost(data string) {
+	// 从错误信息中提取主机地址和端口
+	host, port, err := extractHostAndPort(data)
+	if err != nil {
+		fmt.Printf("提取主机信息失败: %v\n", err)
+		return
+	}
+
+	// 获取 known_hosts 文件路径
+	knownHostsPath, err := getKnownHostsPath(data)
+	if err != nil {
+		fmt.Printf("获取 known_hosts 文件路径失败: %v\n", err)
+		return
+	}
+
+	fmt.Printf("找到 [%s]:%s 在 %s 文件中，并删除\n", host, port, knownHostsPath)
+
+	// 删除指定主机的记录
+	err = removeHostFromKnownHosts(knownHostsPath, host, port)
+	if err != nil {
+		fmt.Printf("删除记录失败: %v\n", err)
+		return
+	}
+
+	fmt.Println("成功删除已知主机记录")
+}
+
+// 从错误信息中提取主机和端口
+func extractHostAndPort(data string) (string, string, error) {
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "Host key for [") && strings.Contains(line, "has changed") {
+			// 提取类似 "[10.1.102.34]:5522" 的部分
+			start := strings.Index(line, "[")
+			end := strings.Index(line, "]")
+			if start != -1 && end != -1 {
+				host := line[start+1 : end]
+				// 提取端口
+				portStart := strings.Index(line, "]:")
+				if portStart != -1 {
+					portEnd := strings.Index(line[portStart:], " ")
+					if portEnd == -1 {
+						portEnd = len(line)
+					} else {
+						portEnd += portStart
+					}
+					port := line[portStart+2 : portEnd]
+					return host, port, nil
+				}
+			}
+		}
+	}
+	return "", "", fmt.Errorf("无法从错误信息中提取主机和端口")
+}
+
+// 获取 known_hosts 文件路径
+func getKnownHostsPath(data string) (string, error) {
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "Offending") && strings.Contains(line, "known_hosts") {
+			// 提取文件路径
+			start := strings.Index(line, "in ")
+			if start != -1 {
+				pathPart := line[start+3:]
+				end := strings.Index(pathPart, ":")
+				if end != -1 {
+					return pathPart[:end], nil
+				}
+				return pathPart, nil
+			}
+		}
+		if strings.Contains(line, "Add correct host key in") {
+			// 从另一行提取文件路径
+			start := strings.Index(line, "in ")
+			if start != -1 {
+				pathPart := line[start+3:]
+				end := strings.Index(pathPart, " to")
+				if end != -1 {
+					return pathPart[:end], nil
+				}
+				return pathPart, nil
+			}
+		}
+	}
+
+	// 如果无法从错误信息中提取，使用默认路径
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("无法获取用户主目录: %v", err)
+	}
+	return homeDir + "/.ssh/known_hosts", nil
+}
+
+// 从 known_hosts 文件中删除指定主机的记录
+func removeHostFromKnownHosts(filePath, host, port string) error {
+	// 检查文件是否存在
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return fmt.Errorf("文件不存在: %s", filePath)
+	}
+
+	// 读取文件
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("打开文件失败: %v", err)
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	targetPattern1 := fmt.Sprintf("[%s]:%s", host, port)
+	targetPattern2 := fmt.Sprintf("%s:%s", host, port)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		// 跳过以目标主机开头的行（两种格式都检查）
+		if strings.HasPrefix(line, targetPattern1) || strings.HasPrefix(line, targetPattern2) {
+			fmt.Printf("删除记录: %s\n", line)
+			continue
+		}
+		lines = append(lines, line)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("读取文件失败: %v", err)
+	}
+
+	// 写回文件
+	return writeLinesToFile(filePath, lines)
+}
+
+// 将行写回文件
+func writeLinesToFile(filePath string, lines []string) error {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("创建文件失败: %v", err)
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	for _, line := range lines {
+		_, err := writer.WriteString(line + "\n")
+		if err != nil {
+			return fmt.Errorf("写入文件失败: %v", err)
+		}
+	}
+	return writer.Flush()
 }

@@ -35,7 +35,7 @@ func Execute() error {
 
 func init() {
 	homeDir, _ := os.UserHomeDir()
-	defaultConfigDir := filepath.Join(homeDir, ".config", "sshpky")
+	defaultConfigDir := filepath.Join(homeDir, ".sshpky")
 
 	rootCmd.PersistentFlags().StringVarP(&configDir, "config-dir", "c", defaultConfigDir, "config directory")
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "f", "config.yaml", "config file name")
