@@ -5,6 +5,7 @@ import (
 	"os"
 	"sshpky/pkg/config"
 	"sshpky/pkg/utils"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -28,9 +29,12 @@ var (
 
 var msCmd = &cobra.Command{
 	Use:   "ms",
-	Short: "ms SSH key groups",
-	Long: `ms groups for SSH keys configuration.
+	Short: "manage SSH key groups",
+	Long: `manage groups for SSH keys configuration.
 This command allows you to list, use, and manage different SSH key groups.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		msBubble(args)
+	},
 }
 
 var msListCmd = &cobra.Command{
@@ -93,12 +97,13 @@ func init() {
 	// 为 list 命令添加标志
 	msListCmd.Flags().StringVarP(&searchKeyword, "search", "s", "", "Search keyword for filtering SSH configurations")
 	msListCmd.Flags().BoolVarP(&showDetail, "detail", "d", false, "Show detailed configuration information")
+	msListCmd.Flags().BoolVar(&noheader, "no-headers", false, "no-headers")
 }
 
 func listSSHConfigs(args []string, searchKeyword string, showDetail bool) {
 	manager := config.NewSSHConfigManager("")
 
-	var configs []config.SshConfigItem
+	var configs []*config.SshConfigItem
 	var err error
 
 	// 确定要显示的组
@@ -121,7 +126,7 @@ func listSSHConfigs(args []string, searchKeyword string, showDetail bool) {
 
 		// 如果指定了组，过滤结果
 		if groupName != "" {
-			var filteredConfigs []config.SshConfigItem
+			var filteredConfigs []*config.SshConfigItem
 			for _, config := range configs {
 				if config.Group == groupName {
 					filteredConfigs = append(filteredConfigs, config)
@@ -160,26 +165,39 @@ func listSSHConfigs(args []string, searchKeyword string, showDetail bool) {
 		return
 	}
 
-	// 显示配置列表
-	fmt.Printf("SSH Configurations")
-	if groupName != "" {
-		fmt.Printf(" in group '%s'", groupName)
-	}
-	if searchKeyword != "" {
-		fmt.Printf(" matching '%s'", searchKeyword)
-	}
-	fmt.Printf(" (%d found):\n\n", len(configs))
+	if !noheader {
 
-	for i, config := range configs {
-		if showDetail {
-			printSSHConfigDetail(config, i+1)
-			if i < len(configs)-1 {
-				fmt.Println("---")
-			}
-		} else {
-			printSSHConfigSummary(config, i+1)
+		// 显示配置列表
+		fmt.Printf("SSH Configurations")
+		if groupName != "" {
+			fmt.Printf(" in group '%s'", groupName)
 		}
+		if searchKeyword != "" {
+			fmt.Printf(" matching '%s'", searchKeyword)
+		}
+		fmt.Printf(" (%d found):\n\n", len(configs))
 	}
+
+	w := new(tabwriter.Writer)
+	// Format in tab-separated columns with a tab stop of 8.
+	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
+	if !noheader {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "Host", "HostName", "Port", "User")
+	}
+
+	for _, config := range configs {
+		// if showDetail {
+		// 	printSSHConfigDetail(config, i+1)
+		// 	if i < len(configs)-1 {
+		// 		fmt.Println("---")
+		// 	}
+		// } else {
+		// 	printSSHConfigSummary(config, i+1)
+		// }
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", config.Host, config.HostName, config.Port, config.User)
+	}
+	fmt.Fprintln(w)
+	w.Flush()
 }
 
 func deleteSSHConfig(host string) {

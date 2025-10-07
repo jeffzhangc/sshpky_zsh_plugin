@@ -14,6 +14,7 @@ type SshConfigItem struct {
 	EditTime     string // 最后编辑时间
 	ProxyCommand string // 代理命令，用于跳板机等场景
 	Desc         string // 配置项描述
+	OtherParams  []string
 }
 
 type SecretCategory int
@@ -59,4 +60,11 @@ type SshpkyGroupConfig struct {
 	AutoSave bool           `yaml:"autoSave"`
 	Desc     string         `yaml:"desc"`
 	Category SecretCategory `yaml:"category"`
+}
+
+func (s SshpkyConfig) GetGroupNames() (res []string) {
+	for _, item := range s.Groups {
+		res = append(res, item.Name)
+	}
+	return res
 }

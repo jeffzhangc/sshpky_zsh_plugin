@@ -15,7 +15,7 @@ import (
 var noheader bool
 
 var groupCmd = &cobra.Command{
-	Use:   "group",
+	Use:   "mg",
 	Short: "Manage SSH key groups",
 	Long: `Manage groups for SSH keys configuration.
 This command allows you to list, use, and manage different SSH key groups.`,

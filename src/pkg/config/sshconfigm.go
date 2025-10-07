@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -15,20 +16,33 @@ type SSHConfigManager struct {
 	ConfigPath string
 }
 
+var sshConfigM *SSHConfigManager
+var once sync.Once
+var commonConf []string = []string{}
+var sshConfigs []*SshConfigItem = []*SshConfigItem{}
+
 // NewSSHConfigManager 创建新的 SSH 配置管理器
 func NewSSHConfigManager(configPath string) *SSHConfigManager {
-	homeDir, _ := os.UserHomeDir()
-	if configPath == "" {
-		configPath = filepath.Join(homeDir, ".ssh", "config")
-	}
-	return &SSHConfigManager{
-		ConfigPath: configPath,
-	}
+	once.Do(func() {
+		homeDir, _ := os.UserHomeDir()
+		if configPath == "" {
+			configPath = filepath.Join(homeDir, ".ssh", "config")
+		}
+		sshConfigM = &SSHConfigManager{
+			ConfigPath: configPath,
+		}
+		sshConfigs, _ = sshConfigM.readConfig()
+	})
+	return sshConfigM
+}
+
+func (m *SSHConfigManager) ReadConfig() ([]*SshConfigItem, error) {
+	return sshConfigs, nil
 }
 
 // ReadConfig 读取整个 SSH 配置文件
-func (m *SSHConfigManager) ReadConfig() ([]SshConfigItem, error) {
-	var configs []SshConfigItem
+func (m *SSHConfigManager) readConfig() ([]*SshConfigItem, error) {
+	var configs []*SshConfigItem
 
 	// 检查文件是否存在
 	if _, err := os.Stat(m.ConfigPath); os.IsNotExist(err) {
@@ -47,7 +61,7 @@ func (m *SSHConfigManager) ReadConfig() ([]SshConfigItem, error) {
 	var currentComments []string // 存储当前配置块前的注释
 
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		line := strings.TrimRight(scanner.Text(), " ")
 
 		// 处理注释行
 		if strings.HasPrefix(line, "#") {
@@ -66,31 +80,33 @@ func (m *SSHConfigManager) ReadConfig() ([]SshConfigItem, error) {
 		// 检查是否是 Host 块开始
 		if strings.HasPrefix(line, "Host ") {
 			// 保存前一个配置项
-			if currentConfig != nil {
-				// 处理之前收集的注释信息
-				m.parseComments(currentComments, currentConfig)
-				configs = append(configs, *currentConfig)
-			}
+			// if currentConfig != nil {
+			// 	// 处理之前收集的注释信息
+			// 	m.parseComments(currentComments, currentConfig)
+			// 	currentConfig = nil
+			// }
 
 			// 开始新的配置项
 			hosts := strings.Fields(line)[1:]
 			if len(hosts) > 0 {
 				currentConfig = &SshConfigItem{
-					Host:     hosts[0],
-					Port:     22, // 默认端口
-					EditTime: time.Now().Format("2006-01-02 15:04:05"),
+					Host:        hosts[0],
+					Port:        22, // 默认端口
+					EditTime:    time.Now().Format("2006-01-02 15:04:05"),
+					OtherParams: []string{},
 				}
 				inHostBlock = true
-
 				// 处理当前收集的注释
 				m.parseComments(currentComments, currentConfig)
+				configs = append(configs, currentConfig)
+
 				currentComments = nil // 重置注释
 			}
-			continue
+			// continue
 		}
 
 		// 如果在 Host 块中，解析配置项
-		if inHostBlock && currentConfig != nil {
+		if inHostBlock && currentConfig != nil && strings.HasPrefix(line, " ") {
 			fields := strings.Fields(line)
 			if len(fields) >= 2 {
 				key := strings.ToLower(fields[0])
@@ -109,16 +125,16 @@ func (m *SSHConfigManager) ReadConfig() ([]SshConfigItem, error) {
 					currentConfig.IdentityFile = value
 				case "proxycommand":
 					currentConfig.ProxyCommand = value
+				default:
+					currentConfig.OtherParams = append(currentConfig.OtherParams, line)
 				}
 			}
+			continue
 		}
-	}
 
-	// 添加最后一个配置项
-	if currentConfig != nil {
-		// 处理最后一个配置项的注释
-		m.parseComments(currentComments, currentConfig)
-		configs = append(configs, *currentConfig)
+		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "Host ") {
+			commonConf = append(commonConf, line)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -147,6 +163,9 @@ func (m *SSHConfigManager) parseComments(comments []string, config *SshConfigIte
 			// 如果注释不是特定格式，且没有描述，将其作为描述
 			config.Desc = comment
 		}
+	}
+	if config.Group == "" {
+		config.Group = DEFAULT_USENAME
 	}
 }
 
@@ -183,6 +202,7 @@ func (m *SSHConfigManager) AddConfig(item SshConfigItem) error {
 	if _, err := writer.WriteString(m.formatConfigItem(item)); err != nil {
 		return fmt.Errorf("写入配置失败: %v", err)
 	}
+	sshConfigs = append(sshConfigs, &item)
 
 	return writer.Flush()
 }
@@ -202,7 +222,7 @@ func (m *SSHConfigManager) UpdateConfig(host string, newItem SshConfigItem) erro
 				newItem.Host = host
 			}
 			newItem.EditTime = time.Now().Format("2006-01-02 15:04:05")
-			configs[i] = newItem
+			configs[i] = &newItem
 			found = true
 			break
 		}
@@ -212,7 +232,9 @@ func (m *SSHConfigManager) UpdateConfig(host string, newItem SshConfigItem) erro
 		return fmt.Errorf("未找到 Host '%s' 的配置", host)
 	}
 
-	return m.writeAllConfigs(configs)
+	err = m.writeAllConfigs(configs)
+	sshConfigs = configs
+	return err
 }
 
 // DeleteConfig 删除指定的 SSH 配置项
@@ -222,7 +244,7 @@ func (m *SSHConfigManager) DeleteConfig(host string) error {
 		return err
 	}
 
-	var newConfigs []SshConfigItem
+	var newConfigs []*SshConfigItem
 	found := false
 
 	for _, config := range configs {
@@ -249,7 +271,7 @@ func (m *SSHConfigManager) FindConfig(host string) (*SshConfigItem, error) {
 
 	for _, config := range configs {
 		if config.Host == host {
-			return &config, nil
+			return config, nil
 		}
 	}
 
@@ -257,13 +279,13 @@ func (m *SSHConfigManager) FindConfig(host string) (*SshConfigItem, error) {
 }
 
 // GetConfigsByGroup 根据分组获取配置项
-func (m *SSHConfigManager) GetConfigsByGroup(group string) ([]SshConfigItem, error) {
+func (m *SSHConfigManager) GetConfigsByGroup(group string) ([]*SshConfigItem, error) {
 	configs, err := m.ReadConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	var result []SshConfigItem
+	var result []*SshConfigItem
 	for _, config := range configs {
 		if config.Group == group {
 			result = append(result, config)
@@ -274,13 +296,13 @@ func (m *SSHConfigManager) GetConfigsByGroup(group string) ([]SshConfigItem, err
 }
 
 // SearchConfigs 搜索配置项（根据 Host, HostName, Desc 字段）
-func (m *SSHConfigManager) SearchConfigs(keyword string) ([]SshConfigItem, error) {
+func (m *SSHConfigManager) SearchConfigs(keyword string) ([]*SshConfigItem, error) {
 	configs, err := m.ReadConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	var result []SshConfigItem
+	var result []*SshConfigItem
 	pattern := strings.ToLower(keyword)
 
 	for _, config := range configs {
@@ -296,7 +318,7 @@ func (m *SSHConfigManager) SearchConfigs(keyword string) ([]SshConfigItem, error
 }
 
 // writeAllConfigs 将所有配置项写入文件
-func (m *SSHConfigManager) writeAllConfigs(configs []SshConfigItem) error {
+func (m *SSHConfigManager) writeAllConfigs(configs []*SshConfigItem) error {
 	// 确保 SSH 目录存在
 	sshDir := filepath.Dir(m.ConfigPath)
 	if err := os.MkdirAll(sshDir, 0700); err != nil {
@@ -317,13 +339,18 @@ func (m *SSHConfigManager) writeAllConfigs(configs []SshConfigItem) error {
 		return fmt.Errorf("写入文件头失败: %v", err)
 	}
 
-	// 写入所有配置项
-	for _, config := range configs {
-		if _, err := writer.WriteString(m.formatConfigItem(config)); err != nil {
-			return fmt.Errorf("写入配置失败: %v", err)
-		}
+	for _, comm := range commonConf {
+		writer.WriteString(comm + "\n")
 	}
 
+	// 写入所有配置项
+	for _, config := range configs {
+		if _, err := writer.WriteString(m.formatConfigItem(*config)); err != nil {
+			return fmt.Errorf("写入配置失败: %v", err)
+		}
+
+	}
+	sshConfigs = configs
 	return writer.Flush()
 }
 
@@ -373,6 +400,12 @@ func (m *SSHConfigManager) formatConfigItem(item SshConfigItem) string {
 
 	if item.ProxyCommand != "" {
 		builder.WriteString(fmt.Sprintf("    ProxyCommand %s\n", item.ProxyCommand))
+	}
+
+	if len(item.OtherParams) > 0 {
+		for _, os := range item.OtherParams {
+			builder.WriteString(fmt.Sprintf("%s\n", os))
+		}
 	}
 
 	builder.WriteString("\n")
