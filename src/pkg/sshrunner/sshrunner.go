@@ -26,7 +26,7 @@ type SSHOptions struct {
 	Debug    bool
 }
 
-func RunSSH(sshCmd string, username string, host string, port int) error {
+func RunSSH(sshCmd string, username string, host string, port int, args []string) error {
 	shell, err := loginshell.Shell()
 	if err != nil {
 		shell = "/bin/bash"

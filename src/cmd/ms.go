@@ -26,12 +26,13 @@ var (
  * 4. get abc 显示 abc 的 ssh 配置信息
  *
  */
-
 var msCmd = &cobra.Command{
 	Use:   "ms",
-	Short: "manage SSH key groups",
-	Long: `manage groups for SSH keys configuration.
-This command allows you to list, use, and manage different SSH key groups.`,
+	Short: "Manage SSH config items",
+	Long: `Manage SSH key groups and configurations.
+This command allows you to list, use, and manage different SSH key groups.
+You can list all configured SSH key groups, search for specific items, 
+delete SSH key configurations, and view detailed information about individual items.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		msBubble(args)
 	},

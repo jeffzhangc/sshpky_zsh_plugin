@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/user"
 	"sshpky/pkg/sshrunner"
 	"strings"
 
@@ -47,7 +46,7 @@ Examples:
 
 		// 这里可以添加实际的 SSH 连接逻辑
 		// exec.Command("ssh", sshArgs...)
-		err := sshrunner.RunSSH(sshCmd, connArgs.User, connArgs.Host, connArgs.Port)
+		err := sshrunner.RunSSH(sshCmd, connArgs.User, connArgs.Host, connArgs.Port, args)
 		if err != nil {
 			// panic(err)
 			fmt.Println("error", err.Error())
@@ -64,11 +63,11 @@ func parseDestination(destination string) error {
 		connArgs.Host = parts[1]
 	} else {
 		// 如果没有指定用户，使用当前用户
-		currentUser, err := user.Current()
-		if err != nil {
-			return fmt.Errorf("failed to get current user: %v", err)
-		}
-		connArgs.User = currentUser.Username
+		// currentUser, err := user.Current()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to get current user: %v", err)
+		// }
+		// connArgs.User = currentUser.Username
 		connArgs.Host = destination
 	}
 	return nil
@@ -79,15 +78,21 @@ func buildSSHCommand() string {
 	var args []string
 
 	// 添加端口参数
-	args = append(args, "-p", fmt.Sprintf("%d", connArgs.Port))
-
+	if connArgs.Port != 22 {
+		args = append(args, "-p", fmt.Sprintf("%d", connArgs.Port))
+	}
 	// 添加身份文件参数（-i）
 	if connArgs.Identity != "" {
 		args = append(args, "-i", connArgs.Identity)
 	}
 
 	// 添加目标地址
-	target := fmt.Sprintf("%s@%s", connArgs.User, connArgs.Host)
+	var target string
+	if connArgs.User == "" {
+		target = connArgs.Host
+	} else {
+		target = fmt.Sprintf("%s@%s", connArgs.User, connArgs.Host)
+	}
 	args = append(args, target)
 
 	// 构建命令字符串

@@ -262,7 +262,14 @@ func (m msModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.updateConfig(m.filteredConfigs[selectedIndex])
 					}
 				}
+			case "c":
+				// try to connect to current host
+				if m.currentConfig != nil {
+					fmt.Println("test....xxx", "try to connect", m.currentConfig.Host)
+					return m, tea.Quit
+				}
 			}
+
 		case stateDetail:
 			switch msg.String() {
 			case "q", "esc", "backspace":
@@ -471,6 +478,10 @@ func (m msModel) configDetailView() string {
 	}
 	if config.EditTime != "" {
 		b.WriteString(fmt.Sprintf("Last Edit: %s\n", config.EditTime))
+	}
+	if len(config.OtherParams) > 0 {
+		b.WriteString("OtherParams:\n")
+		b.WriteString(strings.Join(config.OtherParams, "\n"))
 	}
 
 	b.WriteString("\n" + helpStyle.Render("q/ESC: Back to list • u: Update this configuration"))
