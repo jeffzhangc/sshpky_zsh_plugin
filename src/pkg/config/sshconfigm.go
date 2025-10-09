@@ -159,6 +159,8 @@ func (m *SSHConfigManager) parseComments(comments []string, config *SshConfigIte
 			config.EditTime = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(comment, "EditTime:"), "Last Edit:"))
 		} else if strings.HasPrefix(comment, "Password:") {
 			config.Password = strings.TrimSpace(strings.TrimPrefix(comment, "Password:"))
+		} else if strings.HasPrefix(comment, "MFASecret") {
+			config.MFASecret = strings.TrimSpace(strings.TrimPrefix(comment, "MFASecret:"))
 		} else if config.Desc == "" && !strings.Contains(comment, ":") {
 			// 如果注释不是特定格式，且没有描述，将其作为描述
 			config.Desc = comment
@@ -378,6 +380,11 @@ func (m *SSHConfigManager) formatConfigItem(item SshConfigItem) string {
 		builder.WriteString(fmt.Sprintf("# Password: %s\n", item.Password))
 	}
 
+	// mfa
+	if item.MFASecret != "" {
+		builder.WriteString(fmt.Sprintf("# MFASecret: %s\n", item.MFASecret))
+	}
+
 	// 开始 Host 块
 	builder.WriteString(fmt.Sprintf("Host %s\n", item.Host))
 
@@ -432,4 +439,40 @@ func (m *SSHConfigManager) BackupConfig() error {
 func (m *SSHConfigManager) ValidateConfig() error {
 	_, err := m.ReadConfig()
 	return err
+}
+
+// 对外方法，保存 configItem
+func SaveConfigFromConn(connConf SshConfigItem) {
+	ssm := NewSSHConfigManager("")
+	var group *SshpkyGroupConfig = connConf.getGroup()
+	if connConf.Group == "" {
+		connConf.Group = config.Use
+	}
+
+	if connConf.HostName == "" {
+		connConf.HostName = connConf.Host
+	}
+
+	if group == nil {
+		// group 不存在，暂不自动保存
+		fmt.Printf("group %s is not exist,do not auto save group\n", connConf.Group)
+		return
+	}
+
+	existConfig, _ := ssm.FindConfig(connConf.Host)
+
+	// 存储密码
+	keym := group.getKeyManager()
+
+	if existConfig != nil && (existConfig.Password != connConf.Password || existConfig.MFASecret != connConf.MFASecret) {
+		keym.SavePwd(&connConf)
+		connConf.EditTime = time.Now().Format("2006-01-02 15:04:05")
+		ssm.UpdateConfig(connConf.Host, connConf)
+		fmt.Printf("update %s success\n", connConf.Host)
+	} else if existConfig == nil {
+		connConf.EditTime = time.Now().Format("2006-01-02 15:04:05")
+		keym.SavePwd(&connConf)
+		ssm.AddConfig(connConf)
+		fmt.Printf("add %s success\n", connConf.Host)
+	}
 }

@@ -96,16 +96,16 @@ func listGroups(noheader bool) {
 	// }
 
 	for _, group := range cfg.Groups {
-		// active := ""
-		// if group.Name == cfg.Use {
-		// 	active = " (active)"
-		// }
+		active := ""
+		if group.Name == cfg.Use {
+			active = " (active)"
+		}
 		// fmt.Printf("Name: %s%s\n", group.Name, active)
 		// fmt.Printf("  Description: %s\n", group.Desc)
 		// fmt.Printf("  Auto-save: %v\n", group.AutoSave)
 		// fmt.Printf("  Secret: %s\n", maskSecret(group.Secret))
 		// fmt.Println()
-		fmt.Fprintf(w, "%s\t%s\t%s\n", group.Name, group.Category.String(), group.Desc)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", group.Name+active, group.Category.String(), group.Desc)
 	}
 	fmt.Fprintln(w)
 	w.Flush()

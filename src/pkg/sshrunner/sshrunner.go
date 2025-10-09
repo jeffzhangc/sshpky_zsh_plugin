@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sshpky/pkg/config"
 	"sshpky/pkg/km"
 	"strings"
 	"syscall"
@@ -25,8 +26,17 @@ type SSHOptions struct {
 	Debug    bool
 }
 
-func RunSSH(sshCmd string, username string, host string, port int, args []string) error {
+func RunSSH(sshCmd string, conn config.SshConfigItem, args []string) error {
 	shell, err := getShell()
+
+	ms := config.NewSSHConfigManager("")
+	cnf, _ := ms.FindConfig(conn.Host)
+	if cnf != nil {
+		// 使用 配置文件中的 conn 信息
+		conn = *cnf
+		// fmt.Printf("find %s from config\n", conn.Host)
+	}
+
 	if err != nil {
 		shell = "/bin/bash"
 	}
@@ -54,12 +64,12 @@ func RunSSH(sshCmd string, username string, host string, port int, args []string
 
 	go func() {
 		// if _, err := pt.Write([]byte("unset HISTFILE; export HISTSIZE=0 \n " + sshCmd + ";exit\n")); err != nil {
-		if _, err := pt.Write([]byte(sshCmd + "\n")); err != nil {
+		if _, err := pt.Write([]byte(sshCmd + ";exit\n")); err != nil {
 			errChan <- err
 		}
 	}()
 
-	_, err = autoSSHWithLogin(pt, username, host)
+	_, err = autoSSHWithLogin(pt, conn)
 	errChan <- err
 	select {
 	case er := <-errChan:
@@ -73,9 +83,11 @@ func RunSSH(sshCmd string, username string, host string, port int, args []string
 	// return nil
 }
 
-func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
+func autoSSHWithLogin(pt *os.File, connConf config.SshConfigItem) (string, error) {
 	errChan := make(chan error)
 	msgChan := make(chan string)
+
+	host := connConf.HostName
 
 	var (
 		inputPassword    string
@@ -128,11 +140,9 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 					var password string
 					var err error
 					if autoTryLoginTime == 0 {
-						password, err = km.GetPassword(username, host)
-						if err != nil {
-							errChan <- err
-							return
-						}
+						// password, err = km.GetPassword(username, host)
+						password = connConf.GetPassword()
+
 						if password != "" && len(password) > 0 {
 							autoTryLoginTime += 1
 						}
@@ -177,18 +187,19 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 					strings.Contains(line, "欢迎") ||
 					strings.Contains(line, "Welcome") {
 					os.Stdout.WriteString("login success\r\n")
-					go savePwd(username, host, inputOtpSecret, inputPassword)
+					go savePwd(connConf, inputOtpSecret, inputPassword)
 					msgChan <- data + "\n"
 					return
 				}
 
 				if strings.Contains(line, "OTP Code") {
 					os.Stdout.WriteString(line + ",origianl secret")
-					var optPwd string
+					var optSecret string
 					if otpTryTime == 0 {
-						optPwd, _ = km.GetMFASecret(username, host)
+						// optPwd, _ = km.GetMFASecret(username, host)
+						optSecret = connConf.GetMafSecret()
 					}
-					if optPwd == "" {
+					if optSecret == "" {
 						// reader := bufio.NewReader(os.Stdin)
 						// // fmt.Println("请输入内容：")
 						// byteoptSecret, _ := reader.ReadBytes('\n') // 直接读取到换行符
@@ -197,17 +208,17 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 							errChan <- fmt.Errorf("failed to read password: %v", err)
 							return
 						}
-						optSecret := string(byteoptSecret)
-						optPwd, _ = km.GenerateOTP(optSecret)
+						optSecret = string(byteoptSecret)
 						inputOtpSecret = optSecret
 					}
+					optPwd, _ := km.GenerateOTP(optSecret)
+					inputOtpSecret = optSecret
 					data = "" // 清空已处理的数据
 					_, err = pt.Write([]byte(optPwd + "\n"))
 					if err != nil {
 						errChan <- fmt.Errorf("failed to enter optCode: %v", err)
 						return
 					}
-
 					continue
 				}
 
@@ -258,13 +269,26 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 		return "", fmt.Errorf("timed out waiting for prompt")
 	}
 }
-func savePwd(username, host, otpSecret, inputPassword string) {
+func savePwd(connConf config.SshConfigItem, otpSecret, inputPassword string) {
+	// username := connConf.User
+	// host := connConf.HostName
+
+	// if inputPassword != "" {
+	// 	km.SavePassword(username, host, inputPassword)
+	// }
+
+	// if otpSecret != "" {
+	// 	km.SaveMFASecret(username, host, otpSecret)
+	// }
+	if otpSecret != "" {
+		connConf.MFASecret = otpSecret
+	}
 	if inputPassword != "" {
-		km.SavePassword(username, host, inputPassword)
+		connConf.Password = inputPassword
 	}
 
-	if otpSecret != "" {
-		km.SaveMFASecret(username, host, otpSecret)
+	if connConf.Password != "" || connConf.MFASecret != "" {
+		config.SaveConfigFromConn(connConf)
 	}
 }
 

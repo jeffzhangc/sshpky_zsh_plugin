@@ -3,20 +3,14 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sshpky/pkg/config"
 	"sshpky/pkg/sshrunner"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-type ConnArgs struct {
-	User     string
-	Port     int
-	Identity string // -i 参数，指定密钥文件
-	Host     string
-}
-
-var connArgs ConnArgs
+var connArgs config.SshConfigItem
 
 var connectCmd = &cobra.Command{
 	Use:   "conn [user@]host",
@@ -44,14 +38,14 @@ Examples:
 	},
 }
 
-func runConn(connArgs ConnArgs, args []string) {
+func runConn(connArgs config.SshConfigItem, args []string) {
 	// 构建 SSH 命令
 	sshCmd := buildSSHCommand(connArgs)
 	fmt.Println("Executing:", sshCmd)
 
 	// 这里可以添加实际的 SSH 连接逻辑
 	// exec.Command("ssh", sshArgs...)
-	err := sshrunner.RunSSH(sshCmd, connArgs.User, connArgs.Host, connArgs.Port, args)
+	err := sshrunner.RunSSH(sshCmd, connArgs, args)
 	if err != nil {
 		// panic(err)
 		fmt.Println("error", err.Error())
@@ -78,7 +72,7 @@ func parseDestination(destination string) error {
 }
 
 // buildSSHCommand 构建 SSH 命令参数
-func buildSSHCommand(connArgs ConnArgs) string {
+func buildSSHCommand(connArgs config.SshConfigItem) string {
 	var args []string
 
 	// 添加端口参数
@@ -86,8 +80,8 @@ func buildSSHCommand(connArgs ConnArgs) string {
 		args = append(args, "-p", fmt.Sprintf("%d", connArgs.Port))
 	}
 	// 添加身份文件参数（-i）
-	if connArgs.Identity != "" {
-		args = append(args, "-i", connArgs.Identity)
+	if connArgs.IdentityFile != "" {
+		args = append(args, "-i", connArgs.IdentityFile)
 	}
 
 	// 添加目标地址
@@ -122,5 +116,10 @@ func init() {
 	connectCmd.Flags().IntVarP(&connArgs.Port, "port", "p", 22, "SSH port")
 
 	// 身份文件参数（标准 SSH 的 -i 参数）
-	connectCmd.Flags().StringVarP(&connArgs.Identity, "identity", "i", "", "identity file (private key) for public key authentication")
+	connectCmd.Flags().StringVarP(&connArgs.IdentityFile, "identity", "i", "", "identity file (private key) for public key authentication")
+
+	// group 信息
+	connectCmd.Flags().StringVarP(&connArgs.Group, "group", "g", "", "group for this ssh")
+
+	connectCmd.Flags().StringVarP(&connArgs.HostName, "hostname", "", "", "hostname for this ssh")
 }

@@ -56,6 +56,7 @@ type msModel struct {
 	formTitle       string
 	focusedField    int
 	isNewConfig     bool
+	showPassword    bool // 是否显示密码
 }
 
 // 表格样式
@@ -87,6 +88,14 @@ var (
 
 	inputStyle = lipgloss.NewStyle().
 			Width(40)
+
+	passwordStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00D26A")).
+			Bold(true)
+
+	hiddenStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")).
+			Italic(true)
 )
 
 // 初始化模型
@@ -292,6 +301,15 @@ func (m msModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = stateQuitWithConn
 					return m, tea.Quit
 				}
+			case "p":
+				if m.currentConfig != nil {
+					m.showPassword = !m.showPassword
+					// 	// 显示 password
+					// 	pwd := m.currentConfig.GetPassword()
+					// 	mafPwd := m.currentConfig.GetMafSecret()
+					// 	fmt.Println("Password:", pwd)
+					// 	fmt.Println("MFASecret:", mafPwd)
+				}
 			}
 		case stateDeleteConfirm:
 			switch msg.String() {
@@ -493,12 +511,52 @@ func (m msModel) configDetailView() string {
 	if config.EditTime != "" {
 		b.WriteString(fmt.Sprintf("Last Edit: %s\n", config.EditTime))
 	}
+
+	// 密码信息显示逻辑
+	b.WriteString("\n")
+	if m.showPassword {
+		// 显示密码信息
+		pwd := config.GetPassword()
+		mafPwd := config.GetMafSecret()
+
+		b.WriteString(passwordStyle.Render("Authentication Information:") + "\n")
+		if pwd != "" {
+			b.WriteString(fmt.Sprintf("  Password: %s\n", pwd))
+		} else {
+			b.WriteString("  Password: [Not set]\n")
+		}
+		if mafPwd != "" {
+			b.WriteString(fmt.Sprintf("  MFASecret: %s\n", mafPwd))
+		} else {
+			b.WriteString("  MFASecret: [Not set]\n")
+		}
+		b.WriteString(hiddenStyle.Render("  [Press 'p' to hide]") + "\n")
+	} else {
+		// 隐藏密码信息
+		b.WriteString(hiddenStyle.Render("Authentication Information: [Press 'p' to show]") + "\n")
+	}
+
 	if len(config.OtherParams) > 0 {
-		b.WriteString("OtherParams:\n")
+		b.WriteString("\nOtherParams:\n")
 		b.WriteString(strings.Join(config.OtherParams, "\n"))
 	}
 
-	b.WriteString("\n" + helpStyle.Render("q/ESC: Back to list • u: Update this configuration"))
+	// 更新帮助信息，包含密码切换提示
+	helpText := "q/ESC: Back to list • u: Update this configuration • c: Connect"
+	if m.showPassword {
+		helpText += " • p: Hide password"
+	} else {
+		helpText += " • p: Show password"
+	}
+
+	b.WriteString("\n" + helpStyle.Render(helpText))
+
+	// if len(config.OtherParams) > 0 {
+	// 	b.WriteString("OtherParams:\n")
+	// 	b.WriteString(strings.Join(config.OtherParams, "\n"))
+	// }
+
+	// b.WriteString("\n" + helpStyle.Render("q/ESC: Back to list • u: Update this configuration"))
 
 	return b.String()
 }
@@ -755,15 +813,11 @@ func msBubble(args []string) {
 
 	lastM := runModel.(msModel)
 	if lastM.state == stateQuitWithConn {
-		fmt.Println("bubble tea quit", lastM.currentConfig)
+		// fmt.Println("bubble tea quit", lastM.currentConfig)
 		if lastM.currentConfig != nil {
 			conf := lastM.currentConfig
 			fmt.Println("curr config", conf.User, conf.Host, conf.HostName)
-			runConn(ConnArgs{
-				User: conf.User,
-				Host: conf.Host,
-				Port: conf.Port,
-			}, []string{})
+			runConn(*conf, []string{})
 		}
 	}
 }
