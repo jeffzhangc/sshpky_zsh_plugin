@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/riywo/loginshell"
 	"golang.org/x/term"
 )
 
@@ -27,7 +26,7 @@ type SSHOptions struct {
 }
 
 func RunSSH(sshCmd string, username string, host string, port int, args []string) error {
-	shell, err := loginshell.Shell()
+	shell, err := getShell()
 	if err != nil {
 		shell = "/bin/bash"
 	}
@@ -55,7 +54,7 @@ func RunSSH(sshCmd string, username string, host string, port int, args []string
 
 	go func() {
 		// if _, err := pt.Write([]byte("unset HISTFILE; export HISTSIZE=0 \n " + sshCmd + ";exit\n")); err != nil {
-		if _, err := pt.Write([]byte(sshCmd + ";exit\n")); err != nil {
+		if _, err := pt.Write([]byte(sshCmd + "\n")); err != nil {
 			errChan <- err
 		}
 	}()
@@ -179,7 +178,7 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 					strings.Contains(line, "Welcome") {
 					os.Stdout.WriteString("login success\r\n")
 					go savePwd(username, host, inputOtpSecret, inputPassword)
-					msgChan <- line + "\n"
+					msgChan <- data + "\n"
 					return
 				}
 
@@ -241,6 +240,7 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 	select {
 	case newBuffered := <-msgChan:
 		os.Stdout.WriteString(newBuffered)
+		time.Sleep(time.Millisecond * 500)
 
 		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
@@ -250,6 +250,7 @@ func autoSSHWithLogin(pt *os.File, username, host string) (string, error) {
 
 		go func() { _, _ = io.Copy(pt, os.Stdin) }()
 		_, _ = io.Copy(os.Stdout, pt)
+		// os.Stdout.WriteString("x11" + newBuffered + "xxxx")
 		return "", nil
 	case err := <-errChan:
 		return "", err

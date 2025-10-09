@@ -40,19 +40,23 @@ Examples:
 			os.Exit(1)
 		}
 
-		// 构建 SSH 命令
-		sshCmd := buildSSHCommand()
-		fmt.Println("Executing:", sshCmd)
-
-		// 这里可以添加实际的 SSH 连接逻辑
-		// exec.Command("ssh", sshArgs...)
-		err := sshrunner.RunSSH(sshCmd, connArgs.User, connArgs.Host, connArgs.Port, args)
-		if err != nil {
-			// panic(err)
-			fmt.Println("error", err.Error())
-		}
-		// fmt.Println("done..")
+		runConn(connArgs, args)
 	},
+}
+
+func runConn(connArgs ConnArgs, args []string) {
+	// 构建 SSH 命令
+	sshCmd := buildSSHCommand(connArgs)
+	fmt.Println("Executing:", sshCmd)
+
+	// 这里可以添加实际的 SSH 连接逻辑
+	// exec.Command("ssh", sshArgs...)
+	err := sshrunner.RunSSH(sshCmd, connArgs.User, connArgs.Host, connArgs.Port, args)
+	if err != nil {
+		// panic(err)
+		fmt.Println("error", err.Error())
+	}
+	fmt.Println("done..")
 }
 
 // parseDestination 解析目标地址，支持 user@host 格式
@@ -74,7 +78,7 @@ func parseDestination(destination string) error {
 }
 
 // buildSSHCommand 构建 SSH 命令参数
-func buildSSHCommand() string {
+func buildSSHCommand(connArgs ConnArgs) string {
 	var args []string
 
 	// 添加端口参数

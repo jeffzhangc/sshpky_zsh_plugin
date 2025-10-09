@@ -23,6 +23,7 @@ const (
 	stateSearch
 	stateAddForm
 	stateUpdateForm
+	stateQuitWithConn
 )
 
 // 表单字段索引
@@ -263,11 +264,19 @@ func (m msModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			case "c":
-				// try to connect to current host
-				if m.currentConfig != nil {
-					fmt.Println("test....xxx", "try to connect", m.currentConfig.Host)
+				if len(m.filteredConfigs) > 0 {
+					selectedIndex := m.table.Cursor()
+					if selectedIndex < len(m.filteredConfigs) {
+						m.currentConfig = m.filteredConfigs[selectedIndex]
+						m.state = stateQuitWithConn
+					}
 					return m, tea.Quit
 				}
+				// try to connect to current host
+				// if m.currentConfig != nil {
+				// 	fmt.Println("test....xxx", "try to connect", m.currentConfig.Host)
+
+				// }
 			}
 
 		case stateDetail:
@@ -277,6 +286,11 @@ func (m msModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "u":
 				if m.currentConfig != nil {
 					m.updateConfig(m.currentConfig)
+				}
+			case "c":
+				if m.currentConfig != nil {
+					m.state = stateQuitWithConn
+					return m, tea.Quit
 				}
 			}
 		case stateDeleteConfirm:
@@ -732,8 +746,24 @@ func msBubble(args []string) {
 	}
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
+
+	runModel, err := p.Run()
+	if err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 		os.Exit(1)
+	}
+
+	lastM := runModel.(msModel)
+	if lastM.state == stateQuitWithConn {
+		fmt.Println("bubble tea quit", lastM.currentConfig)
+		if lastM.currentConfig != nil {
+			conf := lastM.currentConfig
+			fmt.Println("curr config", conf.User, conf.Host, conf.HostName)
+			runConn(ConnArgs{
+				User: conf.User,
+				Host: conf.Host,
+				Port: conf.Port,
+			}, []string{})
+		}
 	}
 }
