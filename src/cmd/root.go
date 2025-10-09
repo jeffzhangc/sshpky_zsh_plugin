@@ -111,8 +111,89 @@ func init() {
 	rootCmd.Flags().StringVarP(&connArgs.Group, "group", "g", "", "group for this ssh")
 
 	rootCmd.Flags().StringVarP(&connArgs.HostName, "hostname", "", "", "hostname for this ssh")
+
+	// 添加 completion 命令
+	rootCmd.AddCommand(completionCmd)
 }
 
 func ensureConfigDir() error {
 	return os.MkdirAll(configDir, 0700)
+}
+
+// 创建自定义的 completion 命令
+var completionCmd = &cobra.Command{
+	Use:   "completion [bash|zsh|fish|powershell]",
+	Short: "Generate shell completion scripts",
+	Long: `Generate shell completion scripts for sshpky.
+
+This command generates completion scripts for various shells. After generating,
+you need to source the file or add it to your shell's startup configuration.
+
+Installation Instructions:
+
+Bash (Linux/macOS):
+  # Generate and save the completion script
+  sshpky completion bash > ~/.sshpky-completion.bash
+  
+  # Add to your bashrc
+  echo "source ~/.sshpky-completion.bash" >> ~/.bashrc
+  
+  # Reload your current shell
+  source ~/.bashrc
+
+  # Alternative: system-wide installation (Linux)
+  sudo sshpky completion bash > /etc/bash_completion.d/sshpky
+
+Bash (macOS with Homebrew):
+  # If installed via Homebrew, completion might be automatically installed
+  brew install bash-completion
+
+Zsh:
+  # Generate and save the completion script
+  sshpky completion zsh > ~/.sshpky-completion.zsh
+  
+  # Add to your zshrc
+  echo "source ~/.sshpky-completion.zsh" >> ~/.zshrc
+  
+  # Reload your current shell
+  source ~/.zshrc
+
+  # Alternative: use the function path
+  sshpky completion zsh > "${fpath[1]}/_sshpky"
+
+Fish:
+  # Generate and save the completion script
+  sshpky completion fish > ~/.config/fish/completions/sshpky.fish
+  
+  # Reload your current shell
+  exec fish
+
+PowerShell:
+  # Generate and execute immediately
+  sshpky completion powershell | Out-String | Invoke-Expression
+  
+  # To persist across sessions, add to your profile
+  sshpky completion powershell > $PROFILE
+  
+  # Or create a separate file and source it
+  sshpky completion powershell > ~/.sshpky-completion.ps1
+  Add-Content $PROFILE "~/.sshpky-completion.ps1"
+
+After installation, restart your shell or source the configuration file.
+You can then use tab completion for hosts, groups, and commands.`,
+	DisableFlagsInUseLine: true,
+	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
+	Args:                  cobra.ExactValidArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		switch args[0] {
+		case "bash":
+			cmd.Root().GenBashCompletion(os.Stdout)
+		case "zsh":
+			cmd.Root().GenZshCompletion(os.Stdout)
+		case "fish":
+			cmd.Root().GenFishCompletion(os.Stdout, true)
+		case "powershell":
+			cmd.Root().GenPowerShellCompletion(os.Stdout)
+		}
+	},
 }
