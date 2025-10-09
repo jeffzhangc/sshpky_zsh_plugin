@@ -13,6 +13,7 @@ import (
 var (
 	searchKeyword string
 	showDetail    bool
+	groupName     string
 )
 
 /**
@@ -39,10 +40,11 @@ delete SSH key configurations, and view detailed information about individual it
 }
 
 var msListCmd = &cobra.Command{
-	Use:   "list [group-name]",
-	Short: "List all ssh client",
-	Long:  `List all configured SSH key groups and show the currently active group.`,
-	Args:  cobra.MaximumNArgs(1),
+	Use:               "list [group-name]",
+	Short:             "List all ssh client",
+	Long:              `List all configured SSH key groups and show the currently active group.`,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: groupUseValidArgs, // 添加自动补全函数
 	Run: func(cmd *cobra.Command, args []string) {
 		listSSHConfigs(args, searchKeyword, showDetail)
 	},
@@ -59,10 +61,11 @@ var msDelCmd = &cobra.Command{
 }
 
 var msGetCmd = &cobra.Command{
-	Use:   "get [host-name]",
-	Short: "Get SSH configuration details",
-	Long:  `Get detailed information about a specific SSH configuration.`,
-	Args:  cobra.ExactArgs(1),
+	Use:               "get [host-name]",
+	Short:             "Get SSH configuration details",
+	Long:              `Get detailed information about a specific SSH configuration.`,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: msGetCmdValidArgs, // 添加自动补全函数
 	Run: func(cmd *cobra.Command, args []string) {
 		getSSHConfig(args[0])
 	},
@@ -99,6 +102,13 @@ func init() {
 	msListCmd.Flags().StringVarP(&searchKeyword, "search", "s", "", "Search keyword for filtering SSH configurations")
 	msListCmd.Flags().BoolVarP(&showDetail, "detail", "d", false, "Show detailed configuration information")
 	msListCmd.Flags().BoolVar(&noheader, "no-headers", false, "no-headers")
+	msGetCmd.Flags().StringVarP(&groupName, "group", "g", "", "group name")
+	// 为 group 标志添加补全
+	msGetCmd.RegisterFlagCompletionFunc("group", groupFlagValidArgs)
+}
+
+func msGetCmdValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return connValidArgs(cmd, args, toComplete)
 }
 
 func listSSHConfigs(args []string, searchKeyword string, showDetail bool) {

@@ -4,9 +4,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"runtime"
 	"sshpky/pkg/config"
 	"sshpky/pkg/utils"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -31,10 +33,11 @@ var groupListCmd = &cobra.Command{
 }
 
 var groupUseCmd = &cobra.Command{
-	Use:   "use [group-name]",
-	Short: "Set default group",
-	Long:  `Set the default group to be used for SSH connections.`,
-	Args:  cobra.ExactArgs(1),
+	Use:               "use [group-name]",
+	Short:             "Set default group",
+	Long:              `Set the default group to be used for SSH connections.`,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: groupUseValidArgs, // 添加自动补全函数
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) > 1 && args[0] == "compline" {
 
@@ -73,6 +76,36 @@ func init() {
 	groupCmd.AddCommand(groupDeleteCmd)
 
 	groupListCmd.Flags().BoolVar(&noheader, "no-headers", false, "no-headers")
+}
+
+// groupUseValidArgs 为 group use 命令提供自动补全建议
+func groupUseValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		// 如果已经输入了参数，不再提供补全
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// 获取所有可用的 group 名称
+	cfg := config.GetConfig()
+
+	groups := []string{}
+	for _, g := range cfg.Groups {
+		groups = append(groups, g.Name)
+	}
+	// 过滤以 toComplete 开头的建议
+	var filtered []string
+	for _, group := range groups {
+		if strings.HasPrefix(group, toComplete) {
+			filtered = append(filtered, group)
+		}
+	}
+
+	// 如果没有匹配的，返回所有建议
+	if len(filtered) == 0 {
+		filtered = groups
+	}
+
+	return filtered, cobra.ShellCompDirectiveNoFileComp
 }
 
 func listGroups(noheader bool) {
@@ -132,7 +165,6 @@ func useGroup(groupName string) {
 	config.SetConfig(cfg)
 	fmt.Printf("Default group set to: %s\n", groupName)
 }
-
 func addGroup(groupName string) {
 	cfg := config.GetConfig()
 
@@ -143,8 +175,25 @@ func addGroup(groupName string) {
 			os.Exit(1)
 		}
 	}
-	category := utils.GetAnswer("Category:", "Store", []string{"StoreKeyChain", "StoreFile"})
-	categoryEnum, err := config.ParseSecretCategory(category)
+
+	// 根据操作系统决定存储选项
+	var category string
+	var categoryEnum config.SecretCategory
+	var err error
+
+	// 检查是否为 macOS
+	isMacOS := runtime.GOOS == "darwin"
+
+	if isMacOS {
+		// macOS 系统可以选择 StoreKeyChain 或 StoreFile
+		category = utils.GetAnswer("Category:", "StoreFile", []string{"StoreKeyChain", "StoreFile"})
+	} else {
+		// 非 macOS 系统默认使用 StoreFile，不需要用户选择
+		category = "StoreFile"
+		fmt.Printf("Using StoreFile as storage category (non-macOS system)\n")
+	}
+
+	categoryEnum, err = config.ParseSecretCategory(category)
 	if err != nil {
 		panic(err)
 	}
@@ -211,14 +260,4 @@ func deleteGroup(groupName string) {
 	cfg.Groups = newGroups
 	config.SetConfig(cfg)
 	fmt.Printf("Group '%s' deleted successfully\n", groupName)
-}
-
-func maskSecret(secret string) string {
-	if secret == "" {
-		return "<not set>"
-	}
-	if len(secret) <= 8 {
-		return "***"
-	}
-	return secret[:4] + "***" + secret[len(secret)-4:]
 }
